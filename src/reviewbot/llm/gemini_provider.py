@@ -34,7 +34,10 @@ class GeminiProvider:
                 model=model, contents=prompt, config=config
             )
         except genai_errors.APIError as exc:
-            if "API_KEY" in str(exc) or getattr(exc, "code", None) in (401, 403):
+            # Google reports an invalid key as 400 API_KEY_INVALID, not 401/403,
+            # so a status-code check alone can't catch it — hence the message
+            # match (case-insensitive to survive wording drift).
+            if "api key" in str(exc).lower() or getattr(exc, "code", None) in (401, 403):
                 raise ProviderAuthError(
                     "Gemini rejected the API key — re-set the GEMINI_API_KEY secret"
                 ) from exc

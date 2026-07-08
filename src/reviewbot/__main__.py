@@ -62,7 +62,7 @@ def main() -> int:
     try:
         outcome = review(provider, limiter, config.models.review, chunks, telemetry)
     except ProviderAuthError as exc:
-        print(f"reviewbot: {exc}")
+        print(f"reviewbot: {exc}", file=sys.stderr)
         return 1
     existing = extract_fingerprints(fetch_existing_comment_bodies(gh, number))
     comments = build_comments(outcome.findings, existing)
