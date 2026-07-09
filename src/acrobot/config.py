@@ -18,12 +18,22 @@ class ModelsConfig(BaseModel):
 
 
 class RateLimitConfig(BaseModel):
-    """Free-tier caps. These are config, not constants — Google adjusts
-    free-tier limits over time; check ai.google.dev/gemini-api/docs/rate-limits
-    rather than trusting the defaults."""
+    """Client-side throttle for the review model's free-tier quota.
 
-    rpm: int = 10
-    rpd: int = 250
+    Defaults sit just under the observed gemini-2.5-flash free-tier caps
+    (5 requests/min, 20/day) to leave headroom. Two caveats these numbers
+    can't fix, only soften:
+      * The daily pool is shared across every workflow run and every repo on
+        the same API key — this limiter only meters within a single run, so
+        the real ceiling is lower than `rpd` on a busy day.
+      * Google adjusts free-tier limits over time; treat these as config, not
+        truth, and check ai.google.dev/gemini-api/docs/rate-limits.
+    The provider still honors server-sent retry delays on top of this, so
+    conservative defaults plus server backoff cover the gap.
+    """
+
+    rpm: int = 4
+    rpd: int = 18
 
 
 class BotConfig(BaseModel):

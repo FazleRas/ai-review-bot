@@ -98,6 +98,59 @@ class TestReviewPass:
         assert len(outcome.findings) == 1  # partial results survive
 
 
+class _RateLimitProvider:
+    """Raises a rate limit on the first N calls, then succeeds."""
+
+    def __init__(self, *, is_daily: bool, fail_times: int, retry_after: float = 5.0) -> None:
+        self.calls = 0
+        self._is_daily = is_daily
+        self._fail_times = fail_times
+        self._retry_after = retry_after
+
+    def generate(self, **kwargs) -> ProviderResponse:  # noqa: ANN003
+        from acrobot.llm.provider import ProviderRateLimitError
+
+        self.calls += 1
+        if self.calls <= self._fail_times:
+            raise ProviderRateLimitError(
+                "quota", retry_after=self._retry_after, is_daily=self._is_daily
+            )
+        return ProviderResponse(
+            parsed=FindingList(findings=[_finding(line=3)]),
+            usage=Usage(),
+            model=kwargs["model"],
+        )
+
+
+class TestRateLimitHandling:
+    def test_per_minute_limit_retried_with_reported_delay(self):
+        slept: list[float] = []
+        provider = _RateLimitProvider(is_daily=False, fail_times=1, retry_after=8.0)
+        units = build_units(parse_patch("a.py", PATCH))
+        outcome = review(
+            provider, _limiter(), "fake-model", units, sleep=lambda s: slept.append(s)
+        )
+        assert provider.calls == 2  # one failure, one successful retry
+        assert slept == [8.0]  # honored the provider's delay
+        assert outcome.units_reviewed == 1
+
+    def test_persistent_per_minute_limit_skips_unit(self):
+        provider = _RateLimitProvider(is_daily=False, fail_times=99)
+        units = build_units(parse_patch("a.py", PATCH))
+        outcome = review(provider, _limiter(), "fake-model", units, sleep=lambda s: None)
+        assert outcome.units_errored == 1
+        assert outcome.units_reviewed == 0
+        assert outcome.budget_exhausted is False
+
+    def test_daily_limit_stops_run_as_partial_review(self):
+        provider = _RateLimitProvider(is_daily=True, fail_times=99)
+        units = build_units(parse_patch("a.py", PATCH) + parse_patch("b.py", PATCH))
+        outcome = review(provider, _limiter(), "fake-model", units, sleep=lambda s: None)
+        assert provider.calls == 1  # stopped immediately, no retry, no second unit
+        assert outcome.budget_exhausted is True
+        assert outcome.units_errored == 0
+
+
 class TestBuildComments:
     def _paired(self, finding: Finding):
         unit = build_units(parse_patch("strategies/momentum.py", PATCH))[0]

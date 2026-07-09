@@ -95,3 +95,23 @@ class TestPostprocess:
         config = BotConfig(severity_floor="nit")
         kept = postprocess([_finding("nit", 0.9)], config)
         assert len(kept) == 1
+
+    # Edge cases requested by the bot's own review of PR #6.
+
+    def test_empty_findings(self):
+        assert postprocess([], BotConfig()) == []
+
+    def test_all_findings_filtered_out(self):
+        config = BotConfig()  # confidence 0.6, floor "warning"
+        assert postprocess([_finding("nit", 0.1)], config) == []
+
+    def test_cap_higher_than_count_keeps_all(self):
+        config = BotConfig(max_comments=10, severity_floor="nit")
+        findings = [_finding("critical", 0.9), _finding("warning", 0.8)]
+        assert len(postprocess(findings, config)) == 2
+
+    def test_confidence_boundary_is_inclusive(self):
+        config = BotConfig(confidence_threshold=0.6)
+        # Exactly at the threshold is kept; just below is dropped.
+        assert len(postprocess([_finding("critical", 0.6)], config)) == 1
+        assert postprocess([_finding("critical", 0.59)], config) == []

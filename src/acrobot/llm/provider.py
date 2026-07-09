@@ -38,6 +38,22 @@ class ProviderAuthError(RuntimeError):
     """
 
 
+class ProviderRateLimitError(RuntimeError):
+    """A rate/quota limit was hit. Carries the provider's own advice so the
+    caller can act on it instead of guessing.
+
+    Not a ProviderError subclass: the two demand different responses. A
+    per-minute limit (`is_daily=False`) is transient — wait `retry_after` and
+    retry. A per-day limit (`is_daily=True`) means the run is out of budget —
+    stop and post a partial review, exactly like DailyBudgetExhausted.
+    """
+
+    def __init__(self, message: str, *, retry_after: float, is_daily: bool) -> None:
+        super().__init__(message)
+        self.retry_after = retry_after
+        self.is_daily = is_daily
+
+
 class Provider(Protocol):
     def generate[T: BaseModel](
         self,
