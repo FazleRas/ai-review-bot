@@ -7,14 +7,24 @@ trust the model to report its own file path.
 """
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from importlib.resources import files
 
 from acrobot.diff.chunker import ReviewUnit
-from acrobot.llm.provider import Provider, ProviderError
+from acrobot.llm.provider import (
+    Provider,
+    ProviderError,
+    ProviderRateLimitError,
+    ProviderResponse,
+)
 from acrobot.ratelimit import DailyBudgetExhausted, RateLimiter
 from acrobot.schemas import Finding, FindingList
 from acrobot.telemetry import RunTelemetry
+
+# Cap the honored retry delay so a large or malformed value can't wedge a CI
+# job; the free-tier per-minute window is 60s, so this never truncates a real one.
+_MAX_RETRY_SLEEP = 65.0
 
 
 @dataclass
@@ -23,6 +33,35 @@ class ReviewOutcome:
     units_reviewed: int = 0
     units_errored: int = 0
     budget_exhausted: bool = False
+
+
+def _generate_with_retry(
+    provider: Provider,
+    model: str,
+    system: str,
+    prompt: str,
+    sleep: Callable[[float], None],
+) -> ProviderResponse:
+    """One review call, retrying a per-minute rate limit once using the delay
+    the provider reported. A per-day limit is re-raised for the loop to treat
+    as budget exhaustion; an exhausted per-minute retry degrades to a normal
+    ProviderError (skip this unit)."""
+    try:
+        return provider.generate(
+            model=model, system=system, prompt=prompt, schema=FindingList, reasoning=True
+        )
+    except ProviderRateLimitError as exc:
+        if exc.is_daily:
+            raise
+        sleep(min(exc.retry_after, _MAX_RETRY_SLEEP))
+        try:
+            return provider.generate(
+                model=model, system=system, prompt=prompt, schema=FindingList, reasoning=True
+            )
+        except ProviderRateLimitError as retry_exc:
+            if retry_exc.is_daily:
+                raise
+            raise ProviderError(f"rate limited after retry: {retry_exc}") from retry_exc
 
 
 def _system_prompt() -> str:
@@ -48,6 +87,7 @@ def review(
     model: str,
     units: list[ReviewUnit],
     telemetry: RunTelemetry | None = None,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> ReviewOutcome:
     outcome = ReviewOutcome()
     system = _system_prompt()
@@ -59,13 +99,12 @@ def review(
             break
         started = time.monotonic()
         try:
-            response = provider.generate(
-                model=model,
-                system=system,
-                prompt=_user_prompt(unit),
-                schema=FindingList,
-                reasoning=True,
-            )
+            response = _generate_with_retry(provider, model, system, _user_prompt(unit), sleep)
+        except ProviderRateLimitError:
+            # Only per-day limits reach here (per-minute is retried inside).
+            # Same outcome as the local RPD budget dying: stop, review partial.
+            outcome.budget_exhausted = True
+            break
         except ProviderError as exc:
             print(f"acrobot: provider error on {unit.path}: {exc}")
             outcome.units_errored += 1

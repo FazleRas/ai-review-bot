@@ -109,9 +109,9 @@ Optional tuning via `.github/acrobot.yml` (every key has a default):
 models:
   triage: gemini-2.5-flash-lite
   review: gemini-2.5-flash
-rate_limits:
-  rpm: 10
-  rpd: 250
+rate_limits:      # just under the gemini-2.5-flash free-tier caps (5/min, 20/day);
+  rpm: 4          # the daily pool is shared across all runs on one API key
+  rpd: 18
 triage_threshold: 4
 confidence_threshold: 0.6
 max_comments: 10
