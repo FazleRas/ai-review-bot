@@ -129,9 +129,9 @@ ignore:
 - [x] Diff parsing, filters, provider protocol + Gemini adapter, rate limiter, fingerprints
 - [x] Review pass: structured findings, anchor validation, batched posting, partial-review degradation
 - [x] Dogfooding live on this repo and [AlphaLab](https://github.com/FazleRas/AlphaLab)
-- [ ] Chunker + postprocess: token budgeting, confidence/severity/cap enforcement (weekend 2)
-- [ ] Eval harness: labeled cases, cassette replay in CI, precision/recall/FP-rate reports (weekend 3)
-- [ ] Triage tier + rate-limiter hardening + provider benchmark (weekend 4)
+- [ ] Chunker + postprocess: token budgeting, confidence/severity/cap enforcement
+- [ ] Eval harness: labeled cases, cassette replay in CI, precision/recall/FP-rate reports
+- [ ] Triage tier + rate-limiter hardening + provider benchmark
 - [ ] v2: repository context layer — AST-aware retrieval feeding the review pass
 
 ## Development
