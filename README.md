@@ -162,10 +162,10 @@ Cases are labeled diffs from real PRs (expected findings with line tolerance +
 keyword match; files where any finding is a false positive). Cassettes record
 provider responses at the protocol boundary, so CI replays the whole pipeline
 for free — and fails loudly when a prompt change invalidates a recording,
-forcing a live re-record and a reviewed report before merge. Current baseline
-(first recording): **50% recall, 100% precision** on the seed set — honest
-numbers over good numbers; the day-one 4/4 anecdote is now measurable
-run-to-run variance.
+forcing a live re-record and a reviewed report before merge. Current baseline:
+**75% recall, 100% precision** on the seed set — and across recordings the
+same diff has scored 4/4, 2/4, and 3/4, so run-to-run variance is now a
+measured fact instead of an invisible one. Honest numbers over good numbers.
 
 Every PR here is reviewed by the bot itself (`self-review.yml`) — its false
 positives become eval cases (see [evals/notes.md](evals/notes.md)), its fair

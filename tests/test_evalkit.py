@@ -116,6 +116,27 @@ class TestCassette:
         with pytest.raises(CassetteMiss, match="Re-record"):
             replayer.generate(model="m", system="s", prompt="NEW", schema=FindingList)
 
+    def test_empty_cassette_file_is_treated_as_empty(self, tmp_path):
+        # Both findings from the bot's own review of this harness (PR #10):
+        # an existing-but-empty file must not crash on load...
+        path = tmp_path / "case.json"
+        path.write_text("")
+        provider = CassetteProvider(path, inner=_CountingProvider())
+        provider.generate(model="m", system="s", prompt="p", schema=FindingList)
+        assert provider.recorded == 1
+
+    def test_field_boundaries_cannot_collide(self, tmp_path):
+        # ...and a separator character inside one field must not make two
+        # different requests share a cassette key.
+        path = tmp_path / "case.json"
+        recorder = CassetteProvider(path, inner=_CountingProvider())
+        recorder.generate(model="m", system="a", prompt="b\x00c", schema=FindingList)
+        recorder.save()
+
+        replayer = CassetteProvider(path)  # strict replay
+        with pytest.raises(CassetteMiss):
+            replayer.generate(model="m", system="a\x00b", prompt="c", schema=FindingList)
+
     def test_rerecord_replays_hits_without_spending(self, tmp_path):
         path = tmp_path / "case.json"
         inner = _CountingProvider()

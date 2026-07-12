@@ -28,7 +28,9 @@ class CassetteMiss(RuntimeError):
 
 
 def _key(model: str, system: str, prompt: str, schema_name: str) -> str:
-    payload = "\x00".join([model, system, prompt, schema_name])
+    # JSON-encoding preserves field boundaries unambiguously — a separator
+    # character appearing inside an input can't blur two fields together.
+    payload = json.dumps([model, system, prompt, schema_name])
     return hashlib.sha256(payload.encode()).hexdigest()[:24]
 
 
@@ -44,9 +46,10 @@ class CassetteProvider:
     def __init__(self, path: Path, inner: Provider | None = None) -> None:
         self._path = path
         self._inner = inner
-        self._entries: dict[str, Any] = (
-            json.loads(path.read_text()) if path.exists() else {}
-        )
+        # Tolerate an existing-but-empty file (truncated or interrupted write);
+        # treat it as an empty cassette rather than crashing on json.loads("").
+        text = path.read_text() if path.exists() else ""
+        self._entries: dict[str, Any] = json.loads(text) if text.strip() else {}
         self.replayed = 0
         self.recorded = 0
 
